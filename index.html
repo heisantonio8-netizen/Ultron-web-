@@ -4,11 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Ultron</title>
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#0a0000" />
+<link rel="icon" href="/icon-192.png" />
+<link rel="apple-touch-icon" href="/icon-192.png" />
 <style>
   :root {
     --bg: #0a0000;
     --bg-panel: #120303;
     --red: #dc2626;
+    --red-glow: #ff3b3b;
     --red-dim: #7f1d1d;
     --text: #e8e0e0;
     --text-dim: #8a7373;
@@ -19,6 +24,12 @@
     background: var(--bg);
     color: var(--text);
     font-family: 'Courier New', ui-monospace, monospace;
+    overflow: hidden;
+  }
+  body {
+    background-image:
+      radial-gradient(circle at 50% 0%, rgba(220,38,38,0.08), transparent 60%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 3px);
   }
   #app {
     display: flex;
@@ -36,15 +47,21 @@
   }
   .dot {
     width: 8px; height: 8px; border-radius: 50%;
-    background: var(--red);
-    box-shadow: 0 0 8px var(--red);
+    background: var(--red-glow);
+    box-shadow: 0 0 6px var(--red-glow), 0 0 14px var(--red);
+    animation: pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
   }
   header h1 {
     font-size: 15px;
     letter-spacing: 0.12em;
     margin: 0;
-    color: var(--red);
+    color: var(--red-glow);
     font-weight: 600;
+    text-shadow: 0 0 10px rgba(220,38,38,0.5);
   }
   #log {
     flex: 1;
@@ -54,7 +71,17 @@
     flex-direction: column;
     gap: 22px;
   }
-  .msg { max-width: 90%; line-height: 1.55; font-size: 15px; white-space: pre-wrap; }
+  .msg {
+    max-width: 90%;
+    line-height: 1.55;
+    font-size: 15px;
+    white-space: pre-wrap;
+    animation: rise 0.35s ease-out;
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
   .msg.user {
     align-self: flex-end;
     background: rgba(220, 38, 38, 0.12);
@@ -66,14 +93,30 @@
     align-self: flex-start;
     color: var(--text);
   }
-  .msg.ultron.thinking { color: var(--text-dim); font-style: italic; }
+  .typing {
+    display: flex;
+    gap: 5px;
+    align-self: flex-start;
+    padding: 4px 0;
+  }
+  .typing span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--red-dim);
+    animation: blink 1.2s infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink {
+    0%, 80%, 100% { opacity: 0.25; }
+    40% { opacity: 1; background: var(--red-glow); }
+  }
   form {
     display: flex;
     gap: 10px;
     padding: 14px 16px;
     border-top: 1px solid var(--red-dim);
   }
-  input {
+  input, textarea {
     flex: 1;
     background: var(--bg-panel);
     border: 1px solid var(--red-dim);
@@ -82,8 +125,15 @@
     color: var(--text);
     font-family: inherit;
     font-size: 15px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    resize: none;
+    max-height: 120px;
   }
-  input:focus { outline: none; border-color: var(--red); }
+  input:focus, textarea:focus {
+    outline: none;
+    border-color: var(--red-glow);
+    box-shadow: 0 0 8px rgba(220,38,38,0.35);
+  }
   button {
     background: var(--red);
     color: #fff;
@@ -94,7 +144,9 @@
     font-size: 14px;
     letter-spacing: 0.05em;
     cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s;
   }
+  button:hover:not(:disabled) { box-shadow: 0 0 10px rgba(220,38,38,0.5); }
   button:disabled { background: var(--red-dim); cursor: default; }
 </style>
 </head>
@@ -108,7 +160,7 @@
     <div class="msg ultron">I am present. State your inquiry.</div>
   </div>
   <form id="form">
-    <input id="input" type="text" placeholder="State your query..." autocomplete="off" />
+    <textarea id="input" rows="1" placeholder="State your query..."></textarea>
     <button id="send" type="submit">Send</button>
   </form>
 </div>
@@ -130,6 +182,32 @@
     return div;
   }
 
+  function revealGradually(div, fullText) {
+    return new Promise((resolve) => {
+      const words = fullText.split(' ');
+      let i = 0;
+      div.textContent = '';
+      const interval = setInterval(() => {
+        div.textContent += (i === 0 ? '' : ' ') + words[i];
+        log.scrollTop = log.scrollHeight;
+        i++;
+        if (i >= words.length) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 35);
+    });
+  }
+
+  function addTyping() {
+    const div = document.createElement('div');
+    div.className = 'typing';
+    div.innerHTML = '<span></span><span></span><span></span>';
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+    return div;
+  }
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = input.value.trim();
@@ -140,8 +218,7 @@
     input.value = '';
     sendBtn.disabled = true;
 
-    const thinking = addMessage('Processing...', 'ultron');
-    thinking.classList.add('thinking');
+    const typing = addTyping();
 
     try {
       const currentDateTime = new Date().toString();
@@ -151,22 +228,29 @@
         body: JSON.stringify({ messages: history, currentDateTime }),
       });
       const data = await res.json();
-      thinking.remove();
+      typing.remove();
 
       if (data.error) {
         addMessage('System fault: ' + data.error, 'ultron');
       } else {
-        addMessage(data.reply, 'ultron');
+        const replyDiv = addMessage('', 'ultron');
+        await revealGradually(replyDiv, data.reply);
         history.push({ role: 'assistant', content: data.reply });
       }
     } catch (err) {
-      thinking.remove();
+      typing.remove();
       addMessage('Connection to core severed. Retry.', 'ultron');
     }
 
     sendBtn.disabled = false;
     input.focus();
   });
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js');
+    });
+  }
 </script>
 </body>
 </html>
