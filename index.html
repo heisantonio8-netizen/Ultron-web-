@@ -8,6 +8,7 @@
 <meta name="theme-color" content="#0a0000" />
 <link rel="icon" href="/icon-192.png" />
 <link rel="apple-touch-icon" href="/icon-192.png" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --bg: #0a0000;
@@ -81,6 +82,16 @@
     color: var(--red-glow);
     font-weight: 600;
     text-shadow: 0 0 10px rgba(220,38,38,0.5);
+  }
+  .signout-btn {
+    background: none;
+    border: 1px solid var(--red-dim);
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
   }
   #hero {
     flex: 1;
@@ -230,6 +241,54 @@
   .attach-icons svg { width: 20px; height: 20px; }
   button:hover:not(:disabled) { box-shadow: 0 0 10px rgba(220,38,38,0.5); }
   button:disabled { background: var(--red-dim); cursor: default; }
+
+  #authScreen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 30px;
+  }
+  #authScreen h2 {
+    color: var(--red-glow);
+    letter-spacing: 0.1em;
+    font-size: 16px;
+    text-shadow: 0 0 10px rgba(220,38,38,0.5);
+    margin: 0 0 6px;
+  }
+  .auth-form {
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .auth-form input {
+    width: 100%;
+  }
+  .auth-form button {
+    padding: 12px;
+  }
+  .auth-toggle {
+    color: var(--text-dim);
+    font-size: 13px;
+    text-align: center;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .auth-error {
+    color: var(--red-glow);
+    font-size: 13px;
+    text-align: center;
+  }
+  .auth-hint {
+    color: var(--text-dim);
+    font-size: 13px;
+    text-align: center;
+    max-width: 300px;
+  }
 </style>
 </head>
 <body>
@@ -240,10 +299,39 @@
       <div class="dot"></div>
       <h1>ULTRON ONLINE</h1>
     </div>
-    <div class="header-time" id="headerTime"></div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div class="header-time" id="headerTime"></div>
+      <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
+    </div>
   </header>
 
-  <div id="hero">
+  <div id="authScreen">
+    <h2 id="authTitle">CREATE ACCOUNT</h2>
+    <form class="auth-form" id="signUpForm">
+      <input type="email" id="signUpEmail" placeholder="Email" required autocomplete="email" />
+      <input type="password" id="signUpPassword" placeholder="Password (min 6 characters)" required autocomplete="new-password" />
+      <button type="submit">Sign Up</button>
+      <div class="auth-error" id="signUpError"></div>
+    </form>
+
+    <form class="auth-form" id="loginForm" style="display:none;">
+      <input type="email" id="loginEmail" placeholder="Email" required autocomplete="email" />
+      <input type="password" id="loginPassword" placeholder="Password" required autocomplete="current-password" />
+      <button type="submit">Log In</button>
+      <div class="auth-error" id="loginError"></div>
+    </form>
+
+    <form class="auth-form" id="verifyForm" style="display:none;">
+      <p class="auth-hint">A verification code was sent to your email. Enter it below to activate your account.</p>
+      <input type="text" id="verifyCode" placeholder="6-digit code" inputmode="numeric" required />
+      <button type="submit">Verify</button>
+      <div class="auth-error" id="verifyError"></div>
+    </form>
+
+    <div class="auth-toggle" id="authToggle">Already have an account? Log in</div>
+  </div>
+
+  <div id="hero" style="display:none;">
     <div class="core-wrap">
       <div class="core-ring ring1"></div>
       <div class="core-ring ring2"></div>
@@ -255,7 +343,7 @@
 
   <div id="log" style="display:none;"></div>
 
-  <form id="form">
+  <form id="form" style="display:none;">
     <div class="attach-icons">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -267,14 +355,28 @@
 </div>
 
 <script>
+  const SUPABASE_URL = "https://tizlgigelvnlbjftdrpz.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_mTKce1Me02eRrXLe0P75cQ_Xwni7uKh";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
   const log = document.getElementById('log');
   const hero = document.getElementById('hero');
   const form = document.getElementById('form');
   const input = document.getElementById('input');
   const sendBtn = document.getElementById('send');
   const headerTime = document.getElementById('headerTime');
+  const signOutBtn = document.getElementById('signOutBtn');
+
+  const authScreen = document.getElementById('authScreen');
+  const authTitle = document.getElementById('authTitle');
+  const signUpForm = document.getElementById('signUpForm');
+  const loginForm = document.getElementById('loginForm');
+  const verifyForm = document.getElementById('verifyForm');
+  const authToggle = document.getElementById('authToggle');
 
   let history = [];
+  let pendingEmail = '';
+  let showingLogin = false;
 
   function updateClock() {
     const now = new Date();
@@ -284,6 +386,84 @@
   }
   updateClock();
   setInterval(updateClock, 1000);
+
+  authToggle.addEventListener('click', () => {
+    showingLogin = !showingLogin;
+    signUpForm.style.display = showingLogin ? 'none' : 'flex';
+    loginForm.style.display = showingLogin ? 'flex' : 'none';
+    verifyForm.style.display = 'none';
+    authTitle.textContent = showingLogin ? 'LOG IN' : 'CREATE ACCOUNT';
+    authToggle.textContent = showingLogin ? "Don't have an account? Sign up" : 'Already have an account? Log in';
+  });
+
+  signUpForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('signUpEmail').value.trim();
+    const password = document.getElementById('signUpPassword').value;
+    const errorDiv = document.getElementById('signUpError');
+    errorDiv.textContent = '';
+
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      errorDiv.textContent = error.message;
+      return;
+    }
+    pendingEmail = email;
+    signUpForm.style.display = 'none';
+    loginForm.style.display = 'none';
+    authToggle.style.display = 'none';
+    verifyForm.style.display = 'flex';
+    authTitle.textContent = 'VERIFY EMAIL';
+  });
+
+  verifyForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = document.getElementById('verifyCode').value.trim();
+    const errorDiv = document.getElementById('verifyError');
+    errorDiv.textContent = '';
+
+    const { error } = await supabase.auth.verifyOtp({
+      email: pendingEmail,
+      token: code,
+      type: 'signup',
+    });
+    if (error) {
+      errorDiv.textContent = error.message;
+      return;
+    }
+    enterApp();
+  });
+
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const errorDiv = document.getElementById('loginError');
+    errorDiv.textContent = '';
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      errorDiv.textContent = error.message;
+      return;
+    }
+    enterApp();
+  });
+
+  signOutBtn.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    location.reload();
+  });
+
+  function enterApp() {
+    authScreen.style.display = 'none';
+    hero.style.display = 'flex';
+    form.style.display = 'flex';
+    signOutBtn.style.display = 'inline-block';
+  }
+
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session) enterApp();
+  });
 
   function showChat() {
     if (hero.style.display !== 'none') {
@@ -373,4 +553,5 @@
   }
 </script>
 </body>
-  </html>
+</html>
+        
