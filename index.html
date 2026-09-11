@@ -39,11 +39,30 @@
     margin: 0 auto;
   }
   header {
-    padding: 18px 20px 14px;
+    padding: 16px 20px;
     border-bottom: 1px solid var(--red-dim);
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 10px;
+  }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .hamburger {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    padding: 4px;
+  }
+  .hamburger span {
+    width: 20px; height: 2px;
+    background: var(--text);
+  }
+  .header-time {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: right;
+    line-height: 1.4;
   }
   .dot {
     width: 8px; height: 8px; border-radius: 50%;
@@ -62,6 +81,61 @@
     color: var(--red-glow);
     font-weight: 600;
     text-shadow: 0 0 10px rgba(220,38,38,0.5);
+  }
+  #hero {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+    padding: 20px;
+    text-align: center;
+  }
+  .core-wrap {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .core-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(220,38,38,0.25);
+  }
+  .ring1 { width: 220px; height: 220px; }
+  .ring2 { width: 190px; height: 190px; }
+  .core {
+    width: 140px; height: 140px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 45%, #ff5555, var(--red) 70%);
+    box-shadow: 0 0 40px 10px rgba(220,38,38,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse 2.6s ease-in-out infinite;
+  }
+  .core::after {
+    content: '';
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 12px 4px rgba(255,255,255,0.8);
+  }
+  #hero h2 {
+    color: var(--red-glow);
+    letter-spacing: 0.14em;
+    font-size: 18px;
+    margin: 0;
+    text-shadow: 0 0 10px rgba(220,38,38,0.5);
+  }
+  #hero p {
+    color: var(--text-dim);
+    font-size: 15px;
+    max-width: 300px;
+    margin: 0;
   }
   #log {
     flex: 1;
@@ -146,6 +220,14 @@
     cursor: pointer;
     transition: background 0.2s, box-shadow 0.2s;
   }
+  .attach-icons {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    color: var(--text-dim);
+    padding: 0 2px;
+  }
+  .attach-icons svg { width: 20px; height: 20px; }
   button:hover:not(:disabled) { box-shadow: 0 0 10px rgba(220,38,38,0.5); }
   button:disabled { background: var(--red-dim); cursor: default; }
 </style>
@@ -153,13 +235,32 @@
 <body>
 <div id="app">
   <header>
-    <div class="dot"></div>
-    <h1>ULTRON ONLINE</h1>
+    <div class="header-left">
+      <div class="hamburger"><span></span><span></span><span></span></div>
+      <div class="dot"></div>
+      <h1>ULTRON ONLINE</h1>
+    </div>
+    <div class="header-time" id="headerTime"></div>
   </header>
-  <div id="log">
-    <div class="msg ultron">I am present. State your inquiry.</div>
+
+  <div id="hero">
+    <div class="core-wrap">
+      <div class="core-ring ring1"></div>
+      <div class="core-ring ring2"></div>
+      <div class="core"></div>
+    </div>
+    <h2>ULTRON ONLINE</h2>
+    <p>I am operational. State your query, and I shall respond.</p>
   </div>
+
+  <div id="log" style="display:none;"></div>
+
   <form id="form">
+    <div class="attach-icons">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
+    </div>
     <textarea id="input" rows="1" placeholder="State your query..."></textarea>
     <button id="send" type="submit">Send</button>
   </form>
@@ -167,11 +268,30 @@
 
 <script>
   const log = document.getElementById('log');
+  const hero = document.getElementById('hero');
   const form = document.getElementById('form');
   const input = document.getElementById('input');
   const sendBtn = document.getElementById('send');
+  const headerTime = document.getElementById('headerTime');
 
   let history = [];
+
+  function updateClock() {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-US');
+    headerTime.innerHTML = dateStr + '<br>' + timeStr;
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  function showChat() {
+    if (hero.style.display !== 'none') {
+      hero.style.display = 'none';
+      log.style.display = 'flex';
+      addMessage('I am present. State your inquiry.', 'ultron');
+    }
+  }
 
   function addMessage(text, role) {
     const div = document.createElement('div');
@@ -213,6 +333,7 @@
     const text = input.value.trim();
     if (!text) return;
 
+    showChat();
     addMessage(text, 'user');
     history.push({ role: 'user', content: text });
     input.value = '';
@@ -253,4 +374,4 @@
   }
 </script>
 </body>
-</html>
+  </html>
