@@ -369,6 +369,40 @@
     cursor: pointer;
   }
   .convo-delete:hover { color: var(--red-glow); }
+
+  /* Message controls */
+  .msg-wrap { display: flex; flex-direction: column; gap: 4px; max-width: 90%; }
+  .msg-wrap.user { align-self: flex-end; }
+  .msg-wrap.ultron { align-self: flex-start; }
+  .msg-controls {
+    display: flex;
+    gap: 10px;
+    opacity: 0.6;
+  }
+  .msg-wrap.user .msg-controls { justify-content: flex-end; }
+  .msg-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-family: inherit;
+  }
+  .msg-btn:hover { color: var(--red-glow); }
+  .msg-editing textarea {
+    width: 100%;
+    background: var(--bg-panel);
+    border: 1px solid var(--red-glow);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 15px;
+    padding: 10px;
+    resize: none;
+  }
+  .msg-edit-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .msg-edit-actions button { padding: 6px 14px; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -441,8 +475,8 @@
 </div>
 
 <script>
-  const SUPABASE_URL = "https://tizlgigelvnlbjftdrpz.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_mTKce1Me02eRrXLe0P75cQ_Xwni7uKh";
+  const SUPABASE_URL = "PASTE_YOUR_PROJECT_URL_HERE";
+  const SUPABASE_KEY = "PASTE_YOUR_PUBLISHABLE_KEY_HERE";
 
   if (typeof window.supabase === 'undefined') {
     document.body.innerHTML = '<div style="color:#ff3b3b; padding:30px; font-family:monospace;">ERROR: Supabase library failed to load. Check your internet connection or the script tag in index.html.</div>';
@@ -581,6 +615,7 @@
   newChatBtn.addEventListener('click', () => {
     currentConversationId = null;
     history = [];
+    messageDivs = [];
     log.innerHTML = '';
     log.style.display = 'none';
     hero.style.display = 'flex';
@@ -619,6 +654,7 @@
         if (convo.id === currentConversationId) {
           currentConversationId = null;
           history = [];
+          messageDivs = [];
           log.innerHTML = '';
           log.style.display = 'none';
           hero.style.display = 'flex';
@@ -635,17 +671,22 @@
   async function openConversation(id) {
     const { data, error } = await sb
       .from('messages')
-      .select('role, content')
+      .select('id, role, content')
       .eq('conversation_id', id)
       .order('created_at', { ascending: true });
     if (error) return;
 
     currentConversationId = id;
     history = data.map((m) => ({ role: m.role, content: m.content }));
+    messageDivs = [];
     log.innerHTML = '';
     hero.style.display = 'none';
     log.style.display = 'flex';
-    data.forEach((m) => addMessage(m.content, m.role === 'user' ? 'user' : 'ultron'));
+    data.forEach((m) => {
+      const { wrap } = addHistoryMessage(m.content, m.role === 'user' ? 'user' : 'ultron');
+      messageDivs[messageDivs.length - 1].dbId = m.id;
+    });
+    refreshMessageControls();
     sidebar.classList.remove('open');
     sidebarOverlay.classList.remove('open');
     renderConversationList();
@@ -670,11 +711,12 @@
   }
 
   async function saveMessage(conversationId, role, content) {
-    if (!conversationId) return;
-    const { error: e1 } = await sb.from('messages').insert({ conversation_id: conversationId, role, content });
-    if (e1) alert('DB ERROR (message): ' + e1.message);
+    if (!conversationId) return null;
+    const { data, error: e1 } = await sb.from('messages').insert({ conversation_id: conversationId, role, content }).select().single();
+    if (e1) { alert('DB ERROR (message): ' + e1.message); return null; }
     const { error: e2 } = await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
     if (e2) alert('DB ERROR (update): ' + e2.message);
+    return data ? data.id : null;
   }
 
   function showChat() {
@@ -685,6 +727,8 @@
     }
   }
 
+  let messageDivs = []; // parallel to history: { wrap, bubble, role, dbId }
+
   function addMessage(text, role) {
     const div = document.createElement('div');
     div.className = 'msg ' + (role === 'user' ? 'user' : 'ultron');
@@ -692,6 +736,168 @@
     log.appendChild(div);
     log.scrollTop = log.scrollHeight;
     return div;
+  }
+
+  function addHistoryMessage(text, role) {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-wrap ' + (role === 'user' ? 'user' : 'ultron');
+
+    const bubble = document.createElement('div');
+    bubble.className = 'msg ' + (role === 'user' ? 'user' : 'ultron');
+    bubble.textContent = text;
+
+    const controls = document.createElement('div');
+    controls.className = 'msg-controls';
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'msg-btn';
+    copyBtn.textContent = 'Copy';
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(bubble.textContent);
+      copyBtn.textContent = 'Copied';
+      setTimeout(() => (copyBtn.textContent = 'Copy'), 1200);
+    });
+    controls.appendChild(copyBtn);
+
+    if (role === 'user') {
+      const editBtn = document.createElement('button');
+      editBtn.className = 'msg-btn edit-btn';
+      editBtn.textContent = 'Edit';
+      editBtn.addEventListener('click', () => startEdit(wrap, bubble, controls));
+      controls.appendChild(editBtn);
+    } else {
+      const regenBtn = document.createElement('button');
+      regenBtn.className = 'msg-btn regen-btn';
+      regenBtn.textContent = 'Regenerate';
+      regenBtn.addEventListener('click', () => doRegenerate());
+      controls.appendChild(regenBtn);
+    }
+
+    wrap.appendChild(bubble);
+    wrap.appendChild(controls);
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+
+    messageDivs.push({ wrap, bubble, role, dbId: null });
+    refreshMessageControls();
+    return { wrap, bubble };
+  }
+
+  function refreshMessageControls() {
+    document.querySelectorAll('.edit-btn').forEach((b) => (b.style.display = 'none'));
+    document.querySelectorAll('.regen-btn').forEach((b) => (b.style.display = 'none'));
+    for (let i = messageDivs.length - 1; i >= 0; i--) {
+      if (messageDivs[i].role === 'user') {
+        const btn = messageDivs[i].wrap.querySelector('.edit-btn');
+        if (btn) btn.style.display = 'inline-block';
+        break;
+      }
+    }
+    if (messageDivs.length > 0 && messageDivs[messageDivs.length - 1].role === 'ultron') {
+      const btn = messageDivs[messageDivs.length - 1].wrap.querySelector('.regen-btn');
+      if (btn) btn.style.display = 'inline-block';
+    }
+  }
+
+  function startEdit(wrap, bubble, controls) {
+    const original = bubble.textContent;
+    wrap.classList.add('msg-editing');
+    bubble.style.display = 'none';
+    controls.style.display = 'none';
+
+    const textarea = document.createElement('textarea');
+    textarea.rows = 2;
+    textarea.value = original;
+
+    const actions = document.createElement('div');
+    actions.className = 'msg-edit-actions';
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.textContent = 'Save & Resend';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.background = 'var(--red-dim)';
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+
+    wrap.appendChild(textarea);
+    wrap.appendChild(actions);
+
+    cancelBtn.addEventListener('click', () => {
+      wrap.removeChild(textarea);
+      wrap.removeChild(actions);
+      bubble.style.display = '';
+      controls.style.display = '';
+      wrap.classList.remove('msg-editing');
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      const newText = textarea.value.trim();
+      if (!newText) return;
+      await submitEditedMessage(newText);
+    });
+  }
+
+  async function submitEditedMessage(newText) {
+    // Find the index of the last user message (the one being edited)
+    let idx = -1;
+    for (let i = messageDivs.length - 1; i >= 0; i--) {
+      if (messageDivs[i].role === 'user') { idx = i; break; }
+    }
+    if (idx === -1) return;
+
+    // Delete this message and everything after it, from DOM, history, and DB
+    const toDelete = messageDivs.slice(idx);
+    const idsToDelete = toDelete.map((m) => m.dbId).filter(Boolean);
+    if (idsToDelete.length > 0 && currentConversationId) {
+      await sb.from('messages').delete().in('id', idsToDelete);
+    }
+    toDelete.forEach((m) => m.wrap.remove());
+    messageDivs = messageDivs.slice(0, idx);
+    history = history.slice(0, idx);
+
+    await sendUserMessage(newText);
+  }
+
+  async function doRegenerate() {
+    if (messageDivs.length === 0) return;
+    const last = messageDivs[messageDivs.length - 1];
+    if (last.role !== 'ultron') return;
+
+    if (last.dbId && currentConversationId) {
+      await sb.from('messages').delete().eq('id', last.dbId);
+    }
+    last.wrap.remove();
+    messageDivs.pop();
+    history.pop();
+
+    sendBtn.disabled = true;
+    const typing = addTyping();
+    try {
+      const currentDateTime = new Date().toString();
+      const res = await fetch('/.netlify/functions/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: history, currentDateTime }),
+      });
+      const data = await res.json();
+      typing.remove();
+      if (data.error) {
+        addMessage('System fault: ' + data.error, 'ultron');
+      } else {
+        const { bubble } = addHistoryMessage('', 'ultron');
+        await revealGradually(bubble, data.reply);
+        history.push({ role: 'assistant', content: data.reply });
+        const dbId = await saveMessage(currentConversationId, 'assistant', data.reply);
+        messageDivs[messageDivs.length - 1].dbId = dbId;
+        refreshMessageControls();
+      }
+    } catch (err) {
+      typing.remove();
+      addMessage('Connection to core severed. Retry.', 'ultron');
+    }
+    sendBtn.disabled = false;
   }
 
   function revealGradually(div, fullText) {
@@ -724,15 +930,20 @@
     e.preventDefault();
     const text = input.value.trim();
     if (!text) return;
-
-    showChat();
-    addMessage(text, 'user');
-    history.push({ role: 'user', content: text });
     input.value = '';
+    await sendUserMessage(text);
+  });
+
+  async function sendUserMessage(text) {
+    showChat();
+    const { bubble: userBubble } = addHistoryMessage(text, 'user');
+    history.push({ role: 'user', content: text });
     sendBtn.disabled = true;
 
     const convoId = await ensureConversation(text);
-    await saveMessage(convoId, 'user', text);
+    const userDbId = await saveMessage(convoId, 'user', text);
+    messageDivs[messageDivs.length - 1].dbId = userDbId;
+    refreshMessageControls();
 
     const typing = addTyping();
 
@@ -749,10 +960,12 @@
       if (data.error) {
         addMessage('System fault: ' + data.error, 'ultron');
       } else {
-        const replyDiv = addMessage('', 'ultron');
-        await revealGradually(replyDiv, data.reply);
+        const { bubble } = addHistoryMessage('', 'ultron');
+        await revealGradually(bubble, data.reply);
         history.push({ role: 'assistant', content: data.reply });
-        await saveMessage(convoId, 'assistant', data.reply);
+        const assistantDbId = await saveMessage(convoId, 'assistant', data.reply);
+        messageDivs[messageDivs.length - 1].dbId = assistantDbId;
+        refreshMessageControls();
       }
     } catch (err) {
       typing.remove();
@@ -760,7 +973,7 @@
     }
 
     sendBtn.disabled = false;
-  });
+  }
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
