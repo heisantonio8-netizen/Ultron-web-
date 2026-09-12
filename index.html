@@ -475,8 +475,8 @@
 </div>
 
 <script>
-  const SUPABASE_URL = "https://tizlgigelvnlbjftdrpz.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_mTKce1Me02eRrXLe0P75cQ_Xwni7uKh";
+  const SUPABASE_URL = "PASTE_YOUR_PROJECT_URL_HERE";
+  const SUPABASE_KEY = "PASTE_YOUR_PUBLISHABLE_KEY_HERE";
 
   if (typeof window.supabase === 'undefined') {
     document.body.innerHTML = '<div style="color:#ff3b3b; padding:30px; font-family:monospace;">ERROR: Supabase library failed to load. Check your internet connection or the script tag in index.html.</div>';
@@ -729,6 +729,28 @@
 
   let messageDivs = []; // parallel to history: { wrap, bubble, role, dbId }
 
+  function parseImageMarker(text) {
+    const match = text.match(/^\[IMAGE:\s*(.+)\]$/is);
+    return match ? match[1].trim() : null;
+  }
+
+  function renderContent(bubble, text) {
+    const imagePrompt = parseImageMarker(text);
+    if (imagePrompt) {
+      bubble.textContent = '';
+      const img = document.createElement('img');
+      img.src = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(imagePrompt) + '?width=512&height=512&nologo=true';
+      img.alt = imagePrompt;
+      img.style.maxWidth = '100%';
+      img.style.borderRadius = '10px';
+      img.style.border = '1px solid var(--red-dim)';
+      bubble.appendChild(img);
+      return true;
+    }
+    bubble.textContent = text;
+    return false;
+  }
+
   function addMessage(text, role) {
     const div = document.createElement('div');
     div.className = 'msg ' + (role === 'user' ? 'user' : 'ultron');
@@ -744,7 +766,7 @@
 
     const bubble = document.createElement('div');
     bubble.className = 'msg ' + (role === 'user' ? 'user' : 'ultron');
-    bubble.textContent = text;
+    renderContent(bubble, text);
 
     const controls = document.createElement('div');
     controls.className = 'msg-controls';
@@ -887,7 +909,11 @@
         addMessage('System fault: ' + data.error, 'ultron');
       } else {
         const { bubble } = addHistoryMessage('', 'ultron');
-        await revealGradually(bubble, data.reply);
+        if (!parseImageMarker(data.reply)) {
+          await revealGradually(bubble, data.reply);
+        } else {
+          renderContent(bubble, data.reply);
+        }
         history.push({ role: 'assistant', content: data.reply });
         const dbId = await saveMessage(currentConversationId, 'assistant', data.reply);
         messageDivs[messageDivs.length - 1].dbId = dbId;
@@ -961,7 +987,11 @@
         addMessage('System fault: ' + data.error, 'ultron');
       } else {
         const { bubble } = addHistoryMessage('', 'ultron');
-        await revealGradually(bubble, data.reply);
+        if (!parseImageMarker(data.reply)) {
+          await revealGradually(bubble, data.reply);
+        } else {
+          renderContent(bubble, data.reply);
+        }
         history.push({ role: 'assistant', content: data.reply });
         const assistantDbId = await saveMessage(convoId, 'assistant', data.reply);
         messageDivs[messageDivs.length - 1].dbId = assistantDbId;
