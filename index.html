@@ -294,9 +294,90 @@
     text-align: center;
     max-width: 300px;
   }
+
+  /* Sidebar */
+  #sidebarOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 40;
+    display: none;
+  }
+  #sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 260px;
+    max-width: 80vw;
+    height: 100%;
+    background: var(--bg-panel);
+    border-right: 1px solid var(--red-dim);
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    padding: 18px 14px;
+  }
+  #sidebar.open { transform: translateX(0); }
+  #sidebarOverlay.open { display: block; }
+  .sidebar-title {
+    color: var(--red-glow);
+    letter-spacing: 0.1em;
+    font-size: 14px;
+    margin-bottom: 16px;
+    text-shadow: 0 0 10px rgba(220,38,38,0.5);
+  }
+  .new-chat-btn {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 16px;
+    border-radius: 8px;
+  }
+  #conversationList {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .convo-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .convo-item:hover, .convo-item.active {
+    background: rgba(220,38,38,0.1);
+    color: var(--text);
+  }
+  .convo-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+  .convo-delete {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    padding: 2px 6px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .convo-delete:hover { color: var(--red-glow); }
 </style>
 </head>
 <body>
+<div id="sidebarOverlay"></div>
+<div id="sidebar">
+  <div class="sidebar-title">ULTRON</div>
+  <button class="new-chat-btn" id="newChatBtn">+ New Chat</button>
+  <div id="conversationList"></div>
+</div>
 <div id="app">
   <header>
     <div class="header-left">
@@ -360,8 +441,8 @@
 </div>
 
 <script>
-  const SUPABASE_URL = "https://tizlgigelvnlbjftdrpz.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_mTKce1Me02eRrXLe0P75cQ_Xwni7uKh";
+  const SUPABASE_URL = "PASTE_YOUR_PROJECT_URL_HERE";
+  const SUPABASE_KEY = "PASTE_YOUR_PUBLISHABLE_KEY_HERE";
 
   if (typeof window.supabase === 'undefined') {
     document.body.innerHTML = '<div style="color:#ff3b3b; padding:30px; font-family:monospace;">ERROR: Supabase library failed to load. Check your internet connection or the script tag in index.html.</div>';
@@ -384,10 +465,17 @@
   const loginForm = document.getElementById('loginForm');
   const verifyForm = document.getElementById('verifyForm');
   const authToggle = document.getElementById('authToggle');
+  const sidebar = document.getElementById('sidebar');
+  const sidebarOverlay = document.getElementById('sidebarOverlay');
+  const hamburger = document.querySelector('.hamburger');
+  const newChatBtn = document.getElementById('newChatBtn');
+  const conversationList = document.getElementById('conversationList');
 
   let history = [];
   let pendingEmail = '';
   let showingLogin = false;
+  let currentConversationId = null;
+  let currentUserId = null;
 
   function updateClock() {
     const now = new Date();
@@ -470,11 +558,119 @@
     hero.style.display = 'flex';
     form.style.display = 'flex';
     signOutBtn.style.display = 'inline-block';
+    sb.auth.getUser().then(({ data: { user } }) => {
+      currentUserId = user.id;
+      loadConversationList();
+    });
   }
 
   sb.auth.getSession().then(({ data: { session } }) => {
     if (session) enterApp();
   });
+
+  // --- Sidebar ---
+  hamburger.addEventListener('click', () => {
+    sidebar.classList.add('open');
+    sidebarOverlay.classList.add('open');
+  });
+  sidebarOverlay.addEventListener('click', () => {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('open');
+  });
+
+  newChatBtn.addEventListener('click', () => {
+    currentConversationId = null;
+    history = [];
+    log.innerHTML = '';
+    log.style.display = 'none';
+    hero.style.display = 'flex';
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('open');
+    renderConversationList();
+  });
+
+  let conversationsCache = [];
+
+  async function loadConversationList() {
+    const { data, error } = await sb
+      .from('conversations')
+      .select('id, title, updated_at')
+      .order('updated_at', { ascending: false });
+    if (error) return;
+    conversationsCache = data || [];
+    renderConversationList();
+  }
+
+  function renderConversationList() {
+    conversationList.innerHTML = '';
+    conversationsCache.forEach((convo) => {
+      const item = document.createElement('div');
+      item.className = 'convo-item' + (convo.id === currentConversationId ? ' active' : '');
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'convo-title';
+      titleSpan.textContent = convo.title || 'New conversation';
+      const delBtn = document.createElement('button');
+      delBtn.className = 'convo-delete';
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('Delete this conversation?')) return;
+        await sb.from('conversations').delete().eq('id', convo.id);
+        if (convo.id === currentConversationId) {
+          currentConversationId = null;
+          history = [];
+          log.innerHTML = '';
+          log.style.display = 'none';
+          hero.style.display = 'flex';
+        }
+        loadConversationList();
+      });
+      item.appendChild(titleSpan);
+      item.appendChild(delBtn);
+      item.addEventListener('click', () => openConversation(convo.id));
+      conversationList.appendChild(item);
+    });
+  }
+
+  async function openConversation(id) {
+    const { data, error } = await sb
+      .from('messages')
+      .select('role, content')
+      .eq('conversation_id', id)
+      .order('created_at', { ascending: true });
+    if (error) return;
+
+    currentConversationId = id;
+    history = data.map((m) => ({ role: m.role, content: m.content }));
+    log.innerHTML = '';
+    hero.style.display = 'none';
+    log.style.display = 'flex';
+    data.forEach((m) => addMessage(m.content, m.role === 'user' ? 'user' : 'ultron'));
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('open');
+    renderConversationList();
+  }
+
+  async function ensureConversation(firstMessageText) {
+    if (currentConversationId) return currentConversationId;
+    const title = firstMessageText.slice(0, 40) + (firstMessageText.length > 40 ? '…' : '');
+    const { data, error } = await sb
+      .from('conversations')
+      .insert({ user_id: currentUserId, title })
+      .select()
+      .single();
+    if (error) return null;
+    currentConversationId = data.id;
+    conversationsCache.unshift({ id: data.id, title, updated_at: new Date().toISOString() });
+    renderConversationList();
+    return currentConversationId;
+  }
+
+  async function saveMessage(conversationId, role, content) {
+    if (!conversationId) return;
+    await sb.from('messages').insert({ conversation_id: conversationId, role, content });
+    await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
+  }
 
   function showChat() {
     if (hero.style.display !== 'none') {
@@ -530,6 +726,9 @@
     input.value = '';
     sendBtn.disabled = true;
 
+    const convoId = await ensureConversation(text);
+    await saveMessage(convoId, 'user', text);
+
     const typing = addTyping();
 
     try {
@@ -548,6 +747,7 @@
         const replyDiv = addMessage('', 'ultron');
         await revealGradually(replyDiv, data.reply);
         history.push({ role: 'assistant', content: data.reply });
+        await saveMessage(convoId, 'assistant', data.reply);
       }
     } catch (err) {
       typing.remove();
@@ -564,5 +764,4 @@
   }
 </script>
 </body>
-  </html>
-  
+</html>
