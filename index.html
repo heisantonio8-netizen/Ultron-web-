@@ -595,6 +595,7 @@
     sb.auth.getUser().then(({ data: { user } }) => {
       currentUserId = user.id;
       loadConversationList();
+      loadMemory();
     });
   }
 
@@ -728,6 +729,30 @@
   }
 
   let messageDivs = []; // parallel to history: { wrap, bubble, role, dbId }
+  let memoryFacts = [];
+
+  async function loadMemory() {
+    const { data, error } = await sb.from('memory').select('content');
+    if (error) return;
+    memoryFacts = (data || []).map((m) => m.content);
+  }
+
+  function extractMemoryDirectives(text) {
+    const facts = [];
+    const cleaned = text.replace(/\[REMEMBER:\s*(.+?)\]\s*$/gim, (match, fact) => {
+      facts.push(fact.trim());
+      return '';
+    }).trim();
+    return { cleaned, facts };
+  }
+
+  async function saveNewFacts(facts) {
+    for (const fact of facts) {
+      if (memoryFacts.includes(fact)) continue;
+      const { error } = await sb.from('memory').insert({ user_id: currentUserId, content: fact });
+      if (!error) memoryFacts.push(fact);
+    }
+  }
 
   function parseImageMarker(text) {
     const match = text.match(/^\[IMAGE:\s*(.+)\]$/is);
@@ -898,24 +923,26 @@
     const typing = addTyping();
     try {
       const currentDateTime = new Date().toString();
-      const res = await fetch('/.netlify/functions/chat', {
+      const res = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, currentDateTime }),
+        body: JSON.stringify({ messages: history, currentDateTime, memoryFacts }),
       });
       const data = await res.json();
       typing.remove();
       if (data.error) {
         addMessage('System fault: ' + data.error, 'ultron');
       } else {
+        const { cleaned, facts } = extractMemoryDirectives(data.reply);
+        if (facts.length > 0) await saveNewFacts(facts);
         const { bubble } = addHistoryMessage('', 'ultron');
-        if (!parseImageMarker(data.reply)) {
-          await revealGradually(bubble, data.reply);
+        if (!parseImageMarker(cleaned)) {
+          await revealGradually(bubble, cleaned);
         } else {
-          renderContent(bubble, data.reply);
+          renderContent(bubble, cleaned);
         }
-        history.push({ role: 'assistant', content: data.reply });
-        const dbId = await saveMessage(currentConversationId, 'assistant', data.reply);
+        history.push({ role: 'assistant', content: cleaned });
+        const dbId = await saveMessage(currentConversationId, 'assistant', cleaned);
         messageDivs[messageDivs.length - 1].dbId = dbId;
         refreshMessageControls();
       }
@@ -975,10 +1002,10 @@
 
     try {
       const currentDateTime = new Date().toString();
-      const res = await fetch('/.netlify/functions/chat', {
+      const res = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, currentDateTime }),
+        body: JSON.stringify({ messages: history, currentDateTime, memoryFacts }),
       });
       const data = await res.json();
       typing.remove();
@@ -986,14 +1013,16 @@
       if (data.error) {
         addMessage('System fault: ' + data.error, 'ultron');
       } else {
+        const { cleaned, facts } = extractMemoryDirectives(data.reply);
+        if (facts.length > 0) await saveNewFacts(facts);
         const { bubble } = addHistoryMessage('', 'ultron');
-        if (!parseImageMarker(data.reply)) {
-          await revealGradually(bubble, data.reply);
+        if (!parseImageMarker(cleaned)) {
+          await revealGradually(bubble, cleaned);
         } else {
-          renderContent(bubble, data.reply);
+          renderContent(bubble, cleaned);
         }
-        history.push({ role: 'assistant', content: data.reply });
-        const assistantDbId = await saveMessage(convoId, 'assistant', data.reply);
+        history.push({ role: 'assistant', content: cleaned });
+        const assistantDbId = await saveMessage(convoId, 'assistant', cleaned);
         messageDivs[messageDivs.length - 1].dbId = assistantDbId;
         refreshMessageControls();
       }
