@@ -8,12 +8,12 @@
 <meta name="theme-color" content="#0a0000" />
 <link rel="icon" href="/icon-192.png" />
 <link rel="apple-touch-icon" href="/icon-192.png" />
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   window.onerror = function(msg, url, line) {
     alert('JS ERROR: ' + msg + ' (line ' + line + ')');
   };
-  </script>
+</script>
 <style>
   :root {
     --bg: #0a0000;
@@ -362,7 +362,13 @@
 <script>
   const SUPABASE_URL = "https://tizlgigelvnlbjftdrpz.supabase.co";
   const SUPABASE_KEY = "sb_publishable_mTKce1Me02eRrXLe0P75cQ_Xwni7uKh";
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  if (typeof window.supabase === 'undefined') {
+    document.body.innerHTML = '<div style="color:#ff3b3b; padding:30px; font-family:monospace;">ERROR: Supabase library failed to load. Check your internet connection or the script tag in index.html.</div>';
+    throw new Error('Supabase library not loaded');
+  }
+
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   const log = document.getElementById('log');
   const hero = document.getElementById('hero');
@@ -408,7 +414,7 @@
     const errorDiv = document.getElementById('signUpError');
     errorDiv.textContent = '';
 
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await sb.auth.signUp({ email, password });
     if (error) {
       errorDiv.textContent = error.message;
       return;
@@ -427,7 +433,7 @@
     const errorDiv = document.getElementById('verifyError');
     errorDiv.textContent = '';
 
-    const { error } = await supabase.auth.verifyOtp({
+    const { error } = await sb.auth.verifyOtp({
       email: pendingEmail,
       token: code,
       type: 'signup',
@@ -446,7 +452,7 @@
     const errorDiv = document.getElementById('loginError');
     errorDiv.textContent = '';
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
       errorDiv.textContent = error.message;
       return;
@@ -455,7 +461,7 @@
   });
 
   signOutBtn.addEventListener('click', async () => {
-    await supabase.auth.signOut();
+    await sb.auth.signOut();
     location.reload();
   });
 
@@ -466,7 +472,7 @@
     signOutBtn.style.display = 'inline-block';
   }
 
-  supabase.auth.getSession().then(({ data: { session } }) => {
+  sb.auth.getSession().then(({ data: { session } }) => {
     if (session) enterApp();
   });
 
@@ -558,5 +564,5 @@
   }
 </script>
 </body>
-</html>
-        
+  </html>
+  
