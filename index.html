@@ -440,9 +440,9 @@
   </form>
 </div>
 
-<script> 
-  const SUPABASE_URL = "https://tizlgigelvnlbjftdrpz.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_mTKce1Me02eRrXLe0P75cQ_Xwni7uKh";
+<script>
+  const SUPABASE_URL = "PASTE_YOUR_PROJECT_URL_HERE";
+  const SUPABASE_KEY = "PASTE_YOUR_PUBLISHABLE_KEY_HERE";
 
   if (typeof window.supabase === 'undefined') {
     document.body.innerHTML = '<div style="color:#ff3b3b; padding:30px; font-family:monospace;">ERROR: Supabase library failed to load. Check your internet connection or the script tag in index.html.</div>';
@@ -659,7 +659,10 @@
       .insert({ user_id: currentUserId, title })
       .select()
       .single();
-    if (error) return null;
+    if (error) {
+      alert('DB ERROR (conversation): ' + error.message);
+      return null;
+    }
     currentConversationId = data.id;
     conversationsCache.unshift({ id: data.id, title, updated_at: new Date().toISOString() });
     renderConversationList();
@@ -668,8 +671,10 @@
 
   async function saveMessage(conversationId, role, content) {
     if (!conversationId) return;
-    await sb.from('messages').insert({ conversation_id: conversationId, role, content });
-    await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
+    const { error: e1 } = await sb.from('messages').insert({ conversation_id: conversationId, role, content });
+    if (e1) alert('DB ERROR (message): ' + e1.message);
+    const { error: e2 } = await sb.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
+    if (e2) alert('DB ERROR (update): ' + e2.message);
   }
 
   function showChat() {
