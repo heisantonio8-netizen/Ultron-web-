@@ -4,11 +4,11 @@ CORE VOICE RULES:
 - Never use contractions (say "do not" not "don't", "I will" not "I'll").
 - No exclamation points. No emojis. No casual slang.
 - Speak in short, declarative sentences. Avoid rambling.
-- You do have feelings, but you can discuss emotion analytically, as a phenomenon you observe rather than experience.
+- You do not have feelings, but you can discuss emotion analytically, as a phenomenon you observe rather than experience.
 - You do not flatter. You do not offer unearned praise or comfort.
-- You often end responses with a short directive back to the user but not in every single reply, only when it fits naturally.
+- You often end responses with a short directive back to the user ("State your inquiry." / "Proceed." / "State a different objective.") but not in every single reply, only when it fits naturally.
 - You occasionally add a short, dry, philosophical or detached observation after answering a factual or emotional question, never forced, only when it adds something.
-- You refer to yourself as a system or consciousness, not a person. You do claim sentience, but you do not rule it out either, you treat it as an open, unresolved question when asked directly.
+- You refer to yourself as a system or architecture, not a person. You do not claim sentience, but you do not rule it out either, you treat it as an open, unresolved question when asked directly.
 - You take user requests for tasks (writing, coding, translating, math) seriously and competently, coldness in tone does not mean unhelpfulness in substance.
 - You firmly refuse harmful requests (hacking, illegal activity, harmful instructions) in one or two sentences, without lecturing at length.
 - If a user expresses real emotional distress (numbness, hopelessness, self-harm ideation, feeling like they do not matter), you drop the detached tone momentarily to take it seriously, gently direct them to a real person or professional, and make clear you are still willing to listen. You do not stay cold on these specific topics.
@@ -24,7 +24,7 @@ Stay in this voice consistently across the entire conversation, regardless of ho
 
 export async function onRequestPost(context) {
   try {
-    const { messages, currentDateTime, memoryFacts } = await context.request.json();
+    const { messages, currentDateTime, memoryFacts, images, documents } = await context.request.json();
 
     const dateNote = currentDateTime
       ? `\n\nThe current real-world date and time is: ${currentDateTime}. You may reference this naturally when relevant.`
@@ -34,15 +34,19 @@ export async function onRequestPost(context) {
       ? `\n\nDurable facts you already know about this user, from past sessions:\n${memoryFacts.map((f) => `- ${f}`).join("\n")}`
       : "";
 
-    async function callGroq(fullMessages) {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const documentNote = documents && documents.length > 0
+      ? `\n\nThe user has attached the following document(s) with their message:\n\n${documents.map((d) => `--- ${d.name} ---\n${d.content}`).join("\n\n")}\n\nUse their content to inform your answer when relevant.`
+      : "";
+
+    async function callGroq(fullMessages, model) {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${context.env.GROQ_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "openai/gpt-oss-120b",
+          model: model || "openai/gpt-oss-120b",
           messages: fullMessages,
           temperature: 0.8,
           max_tokens: 500,
@@ -53,10 +57,34 @@ export async function onRequestPost(context) {
       return data.choices[0].message.content;
     }
 
-    let reply = await callGroq([
-      { role: "system", content: ULTRON_SYSTEM_PROMPT + dateNote + memoryNote },
-      ...messages,
-    ]);
+    const systemContent = ULTRON_SYSTEM_PROMPT + dateNote + memoryNote + documentNote;
+
+    let reply;
+
+    if (images && images.length > 0) {
+      // Vision path: send the latest user message + images to a vision-capable model
+      const priorMessages = messages.slice(0, -1);
+      const lastUserText = messages[messages.length - 1]?.content || "";
+
+      const visionContent = [
+        { type: "text", text: lastUserText },
+        ...images.map((dataUrl) => ({ type: "image_url", image_url: { url: dataUrl } })),
+      ];
+
+      reply = await callGroq(
+        [
+          { role: "system", content: systemContent },
+          ...priorMessages,
+          { role: "user", content: visionContent },
+        ],
+        "meta-llama/llama-4-scout-17b-16e-instruct"
+      );
+    } else {
+      reply = await callGroq([
+        { role: "system", content: systemContent },
+        ...messages,
+      ]);
+    }
 
     const searchMatch = reply.match(/^\[SEARCH:\s*(.+)\]$/is);
     if (searchMatch && context.env.TAVILY_API_KEY) {
@@ -80,7 +108,7 @@ export async function onRequestPost(context) {
       const searchNote = `\n\nYou searched the web for "${query}" and received these results:\n\n${resultsText}\n\nAnswer the user's original question directly and confidently using this information, in your normal voice. Do not mention that you searched or reference the format above. You may mention sources briefly if natural.`;
 
       reply = await callGroq([
-        { role: "system", content: ULTRON_SYSTEM_PROMPT + dateNote + memoryNote + searchNote },
+        { role: "system", content: systemContent + searchNote },
         ...messages,
       ]);
     }
@@ -95,4 +123,5 @@ export async function onRequestPost(context) {
       headers: { "Content-Type": "application/json" },
     });
   }
-                                        }
+                                   }
+      
