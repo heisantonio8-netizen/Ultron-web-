@@ -77,7 +77,7 @@ export async function onRequestPost(context) {
           ...priorMessages,
           { role: "user", content: visionContent },
         ],
-        "meta-llama/llama-4-scout-17b-16e-instruct"
+        "qwen/qwen3.6-27b"
       );
     } else {
       reply = await callGroq([
