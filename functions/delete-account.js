@@ -12,7 +12,7 @@ export async function onRequestPost(context) {
     // Verify the token and get the user it belongs to
     const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${accessToken}`,
         apikey: serviceRoleKey,
       },
     });
