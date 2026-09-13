@@ -35,7 +35,7 @@ export async function onRequestPost(context) {
       : "";
 
     async function callGroq(fullMessages) {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
