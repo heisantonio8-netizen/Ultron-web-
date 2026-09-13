@@ -566,6 +566,7 @@
       <input type="password" id="loginPassword" placeholder="Password" required autocomplete="current-password" />
       <button type="submit">Log In</button>
       <div class="auth-error" id="loginError"></div>
+      <p class="auth-toggle" id="forgotToggle" style="font-size:12px;">Forgot password?</p>
     </form>
 
     <form class="auth-form" id="verifyForm" style="display:none;">
@@ -573,6 +574,21 @@
       <input type="text" id="verifyCode" placeholder="6-digit code" inputmode="numeric" required />
       <button type="submit">Verify</button>
       <div class="auth-error" id="verifyError"></div>
+    </form>
+
+    <form class="auth-form" id="forgotEmailForm" style="display:none;">
+      <p class="auth-hint">Enter your email to receive a password reset code.</p>
+      <input type="email" id="forgotEmail" placeholder="Email" required autocomplete="email" />
+      <button type="submit">Send Code</button>
+      <div class="auth-error" id="forgotEmailError"></div>
+    </form>
+
+    <form class="auth-form" id="forgotCodeForm" style="display:none;">
+      <p class="auth-hint">Enter the code sent to your email, then set a new password.</p>
+      <input type="text" id="forgotCode" placeholder="6-digit code" inputmode="numeric" required />
+      <input type="password" id="resetPassword" placeholder="New password (min 6 characters)" required autocomplete="new-password" />
+      <button type="submit">Reset Password</button>
+      <div class="auth-error" id="forgotCodeError"></div>
     </form>
 
     <div class="auth-toggle" id="authToggle">Already have an account? Log in</div>
@@ -660,6 +676,45 @@
     verifyForm.style.display = 'none';
     authTitle.textContent = showingLogin ? 'LOG IN' : 'CREATE ACCOUNT';
     authToggle.textContent = showingLogin ? "Don't have an account? Sign up" : 'Already have an account? Log in';
+  });
+
+  const forgotToggle = document.getElementById('forgotToggle');
+  const forgotEmailForm = document.getElementById('forgotEmailForm');
+  const forgotCodeForm = document.getElementById('forgotCodeForm');
+  let forgotEmailValue = '';
+
+  forgotToggle.addEventListener('click', () => {
+    loginForm.style.display = 'none';
+    signUpForm.style.display = 'none';
+    authToggle.style.display = 'none';
+    forgotEmailForm.style.display = 'flex';
+    authTitle.textContent = 'RESET PASSWORD';
+  });
+
+  forgotEmailForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('forgotEmail').value.trim();
+    const errorDiv = document.getElementById('forgotEmailError');
+    errorDiv.textContent = '';
+    const { error } = await sb.auth.resetPasswordForEmail(email);
+    if (error) { errorDiv.textContent = error.message; return; }
+    forgotEmailValue = email;
+    forgotEmailForm.style.display = 'none';
+    forgotCodeForm.style.display = 'flex';
+  });
+
+  forgotCodeForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = document.getElementById('forgotCode').value.trim();
+    const newPass = document.getElementById('resetPassword').value;
+    const errorDiv = document.getElementById('forgotCodeError');
+    errorDiv.textContent = '';
+    const { error: verifyError } = await sb.auth.verifyOtp({ email: forgotEmailValue, token: code, type: 'recovery' });
+    if (verifyError) { errorDiv.textContent = verifyError.message; return; }
+    const { error: updateError } = await sb.auth.updateUser({ password: newPass });
+    if (updateError) { errorDiv.textContent = updateError.message; return; }
+    alert('Password updated. You are now logged in.');
+    enterApp();
   });
 
   signUpForm.addEventListener('submit', async (e) => {
