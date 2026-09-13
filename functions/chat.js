@@ -38,7 +38,7 @@ export async function onRequestPost(context) {
       ? `\n\nThe user has attached the following document(s) with their message:\n\n${documents.map((d) => `--- ${d.name} ---\n${d.content}`).join("\n\n")}\n\nUse their content to inform your answer when relevant.`
       : "";
 
-    async function callGroq(fullMessages, model) {
+    async function callGroq(fullMessages, model, extraParams) {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -49,7 +49,8 @@ export async function onRequestPost(context) {
           model: model || "openai/gpt-oss-120b",
           messages: fullMessages,
           temperature: 0.8,
-          max_tokens: 1500,
+          max_tokens: 800,
+          ...(extraParams || {}),
         }),
       });
       const data = await res.json();
@@ -87,7 +88,8 @@ export async function onRequestPost(context) {
           ...priorMessages,
           { role: "user", content: visionContent },
         ],
-        "qwen/qwen3.6-27b"
+        "qwen/qwen3.6-27b",
+        { reasoning_effort: "none" }
       );
     } else {
       reply = await callGroq([
@@ -133,5 +135,5 @@ export async function onRequestPost(context) {
       headers: { "Content-Type": "application/json" },
     });
   }
-    }
+                                                                                                                  }
           
