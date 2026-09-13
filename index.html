@@ -403,6 +403,70 @@
   }
   .msg-edit-actions { display: flex; gap: 8px; margin-top: 6px; }
   .msg-edit-actions button { padding: 6px 14px; font-size: 12px; }
+
+  .sidebar-bottom { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--red-dim); }
+  .sidebar-link {
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    text-align: left;
+    padding: 8px 4px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .sidebar-link:hover { color: var(--red-glow); }
+
+  #settingsOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 60;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  #settingsOverlay.open { display: flex; }
+  #settingsPanel {
+    background: var(--bg-panel);
+    border: 1px solid var(--red-dim);
+    border-radius: 12px;
+    padding: 22px;
+    width: 100%;
+    max-width: 360px;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+  #settingsPanel h2 {
+    color: var(--red-glow);
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    margin: 0 0 18px;
+    text-shadow: 0 0 10px rgba(220,38,38,0.5);
+  }
+  .settings-section { margin-bottom: 20px; }
+  .settings-section h3 {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0 0 8px;
+  }
+  .settings-section input {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+  .settings-section button {
+    width: 100%;
+    padding: 10px;
+    font-size: 13px;
+  }
+  .settings-msg { font-size: 12px; margin-top: 6px; color: var(--text-dim); }
+  .settings-msg.error { color: var(--red-glow); }
+  .danger-btn { background: transparent; border: 1px solid var(--red-glow); color: var(--red-glow); }
+  .close-settings-btn { background: var(--red-dim); margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -411,7 +475,45 @@
   <div class="sidebar-title">ULTRON</div>
   <button class="new-chat-btn" id="newChatBtn">+ New Chat</button>
   <div id="conversationList"></div>
+  <div class="sidebar-bottom">
+    <button class="sidebar-link" id="openSettingsBtn">⚙ Settings</button>
+  </div>
 </div>
+
+<div id="settingsOverlay">
+  <div id="settingsPanel">
+    <h2>SETTINGS</h2>
+
+    <div class="settings-section">
+      <h3>Change Password</h3>
+      <input type="password" id="newPassword" placeholder="New password (min 6 characters)" />
+      <button id="changePasswordBtn">Update Password</button>
+      <div class="settings-msg" id="passwordMsg"></div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Change Email</h3>
+      <input type="email" id="newEmail" placeholder="New email address" />
+      <button id="changeEmailBtn">Update Email</button>
+      <div class="settings-msg" id="emailMsg"></div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Export Chat History</h3>
+      <button id="exportHistoryBtn">Download as Text File</button>
+      <div class="settings-msg" id="exportMsg"></div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Delete Account</h3>
+      <button class="danger-btn" id="deleteAccountBtn">Permanently Delete Account</button>
+      <div class="settings-msg" id="deleteMsg"></div>
+    </div>
+
+    <button class="close-settings-btn" id="closeSettingsBtn">Close</button>
+  </div>
+</div>
+
 <div id="app">
   <header>
     <div class="header-left">
@@ -438,8 +540,7 @@
       <input type="email" id="loginEmail" placeholder="Email" required autocomplete="email" />
       <input type="password" id="loginPassword" placeholder="Password" required autocomplete="current-password" />
       <button type="submit">Log In</button>
-<div class="auth-error" id="loginError"></div>
-<p class="auth-toggle" id="forgotToggle" style="font-size:12px;">Forgot password?</p>
+      <div class="auth-error" id="loginError"></div>
     </form>
 
     <form class="auth-form" id="verifyForm" style="display:none;">
@@ -449,22 +550,7 @@
       <div class="auth-error" id="verifyError"></div>
     </form>
 
-    <form class="auth-form" id="forgotEmailForm" style="display:none;">
-<p class="auth-hint">Enter your email to receive a password reset code.</p>
-<input type="email" id="forgotEmail" placeholder="Email" required autocomplete="email" />
-<button type="submit">Send Code</button>
-<div class="auth-error" id="forgotEmailError"></div>
-</form>
-
-<form class="auth-form" id="forgotCodeForm" style="display:none;">
-<p class="auth-hint">Enter the code sent to your email, then set a new password.</p>
-<input type="text" id="forgotCode" placeholder="6-digit code" inputmode="numeric" required />
-<input type="password" id="newPassword" placeholder="New password (min 6 characters)" required autocomplete="new-password" />
-<button type="submit">Reset Password</button>
-<div class="auth-error" id="forgotCodeError"></div>
-</form>
-
-<div class="auth-toggle" id="authToggle">Already have an account? Log in</div>
+    <div class="auth-toggle" id="authToggle">Already have an account? Log in</div>
   </div>
 
   <div id="hero" style="display:none;">
@@ -520,6 +606,9 @@
   const hamburger = document.querySelector('.hamburger');
   const newChatBtn = document.getElementById('newChatBtn');
   const conversationList = document.getElementById('conversationList');
+  const openSettingsBtn = document.getElementById('openSettingsBtn');
+  const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+  const settingsOverlay = document.getElementById('settingsOverlay');
 
   let history = [];
   let pendingEmail = '';
@@ -544,44 +633,6 @@
     authTitle.textContent = showingLogin ? 'LOG IN' : 'CREATE ACCOUNT';
     authToggle.textContent = showingLogin ? "Don't have an account? Sign up" : 'Already have an account? Log in';
   });
-  const forgotToggle = document.getElementById('forgotToggle');
-const forgotEmailForm = document.getElementById('forgotEmailForm');
-const forgotCodeForm = document.getElementById('forgotCodeForm');
-let forgotEmailValue = '';
-
-forgotToggle.addEventListener('click', () => {
-loginForm.style.display = 'none';
-signUpForm.style.display = 'none';
-authToggle.style.display = 'none';
-forgotEmailForm.style.display = 'flex';
-authTitle.textContent = 'RESET PASSWORD';
-});
-
-forgotEmailForm.addEventListener('submit', async (e) => {
-e.preventDefault();
-const email = document.getElementById('forgotEmail').value.trim();
-const errorDiv = document.getElementById('forgotEmailError');
-errorDiv.textContent = '';
-const { error } = await sb.auth.resetPasswordForEmail(email);
-if (error) { errorDiv.textContent = error.message; return; }
-forgotEmailValue = email;
-forgotEmailForm.style.display = 'none';
-forgotCodeForm.style.display = 'flex';
-});
-
-forgotCodeForm.addEventListener('submit', async (e) => {
-e.preventDefault();
-const code = document.getElementById('forgotCode').value.trim();
-const newPass = document.getElementById('newPassword').value;
-const errorDiv = document.getElementById('forgotCodeError');
-errorDiv.textContent = '';
-const { error: verifyError } = await sb.auth.verifyOtp({ email: forgotEmailValue, token: code, type: 'recovery' });
-if (verifyError) { errorDiv.textContent = verifyError.message; return; }
-const { error: updateError } = await sb.auth.updateUser({ password: newPass });
-if (updateError) { errorDiv.textContent = updateError.message; return; }
-alert('Password updated. You are now logged in.');
-enterApp();
-});
 
   signUpForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -655,6 +706,105 @@ enterApp();
 
   sb.auth.getSession().then(({ data: { session } }) => {
     if (session) enterApp();
+  });
+
+  // --- Settings ---
+  openSettingsBtn.addEventListener('click', () => {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('open');
+    settingsOverlay.classList.add('open');
+  });
+  closeSettingsBtn.addEventListener('click', () => {
+    settingsOverlay.classList.remove('open');
+  });
+
+  document.getElementById('changePasswordBtn').addEventListener('click', async () => {
+    const pw = document.getElementById('newPassword').value;
+    const msg = document.getElementById('passwordMsg');
+    msg.className = 'settings-msg';
+    if (!pw || pw.length < 6) {
+      msg.textContent = 'Password must be at least 6 characters.';
+      msg.classList.add('error');
+      return;
+    }
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) {
+      msg.textContent = error.message;
+      msg.classList.add('error');
+    } else {
+      msg.textContent = 'Password updated.';
+      document.getElementById('newPassword').value = '';
+    }
+  });
+
+  document.getElementById('changeEmailBtn').addEventListener('click', async () => {
+    const email = document.getElementById('newEmail').value.trim();
+    const msg = document.getElementById('emailMsg');
+    msg.className = 'settings-msg';
+    if (!email) return;
+    const { error } = await sb.auth.updateUser({ email });
+    if (error) {
+      msg.textContent = error.message;
+      msg.classList.add('error');
+    } else {
+      msg.textContent = 'Confirmation link sent to your new email.';
+      document.getElementById('newEmail').value = '';
+    }
+  });
+
+  document.getElementById('exportHistoryBtn').addEventListener('click', async () => {
+    const msg = document.getElementById('exportMsg');
+    msg.className = 'settings-msg';
+    msg.textContent = 'Preparing export...';
+
+    const { data: convos, error: e1 } = await sb.from('conversations').select('id, title, created_at').order('created_at', { ascending: true });
+    if (e1) { msg.textContent = e1.message; msg.classList.add('error'); return; }
+
+    let output = 'ULTRON — CHAT HISTORY EXPORT\n' + new Date().toString() + '\n\n';
+    for (const convo of convos) {
+      output += '===== ' + (convo.title || 'Untitled') + ' (' + new Date(convo.created_at).toLocaleString() + ') =====\n\n';
+      const { data: msgs } = await sb.from('messages').select('role, content, created_at').eq('conversation_id', convo.id).order('created_at', { ascending: true });
+      (msgs || []).forEach((m) => {
+        output += (m.role === 'user' ? 'YOU: ' : 'ULTRON: ') + m.content + '\n\n';
+      });
+      output += '\n';
+    }
+
+    const blob = new Blob([output], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ultron-chat-history.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+    msg.textContent = 'Downloaded.';
+  });
+
+  document.getElementById('deleteAccountBtn').addEventListener('click', async () => {
+    const msg = document.getElementById('deleteMsg');
+    msg.className = 'settings-msg';
+    if (!confirm('This permanently deletes your account and all conversations. This cannot be undone. Continue?')) return;
+    if (!confirm('Are you absolutely sure? Type OK in the next prompt is not required — this is your final confirmation.')) return;
+
+    msg.textContent = 'Deleting...';
+    const { data: { session } } = await sb.auth.getSession();
+    try {
+      const res = await fetch('/delete-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      });
+      const data = await res.json();
+      if (data.error) {
+        msg.textContent = data.error;
+        msg.classList.add('error');
+      } else {
+        alert('Account deleted.');
+        location.reload();
+      }
+    } catch (err) {
+      msg.textContent = 'Failed to reach deletion service.';
+      msg.classList.add('error');
+    }
   });
 
   // --- Sidebar ---
