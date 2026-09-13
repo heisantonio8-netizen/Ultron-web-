@@ -49,7 +49,7 @@ export async function onRequestPost(context) {
           model: model || "openai/gpt-oss-120b",
           messages: fullMessages,
           temperature: 0.8,
-          max_tokens: 500,
+          max_tokens: 1500,
         }),
       });
       const data = await res.json();
@@ -57,6 +57,13 @@ export async function onRequestPost(context) {
       let content = data.choices[0].message.content;
       // Strip any leaked reasoning/thinking traces some models include
       content = content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+      // Safety net: if reasoning got cut off mid-thought (no closing tag), drop it entirely
+      if (content.includes("<think>")) {
+        content = content.split("<think>")[0].trim();
+      }
+      if (!content) {
+        content = "System reset required. Restate your inquiry.";
+      }
       return content;
     }
 
@@ -126,5 +133,5 @@ export async function onRequestPost(context) {
       headers: { "Content-Type": "application/json" },
     });
   }
-          }
-        
+    }
+          
