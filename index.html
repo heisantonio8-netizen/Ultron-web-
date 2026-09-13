@@ -244,6 +244,31 @@
     padding: 0 2px;
   }
   .attach-icons svg { width: 20px; height: 20px; }
+  #attachPreview {
+    display: flex;
+    gap: 8px;
+    padding: 8px 16px 0;
+    flex-wrap: wrap;
+  }
+  .attach-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-panel);
+    border: 1px solid var(--red-dim);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .attach-chip button {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    padding: 0;
+    font-size: 13px;
+    cursor: pointer;
+  }
   button:hover:not(:disabled) { box-shadow: 0 0 10px rgba(220,38,38,0.5); }
   button:disabled { background: var(--red-dim); cursor: default; }
 
@@ -565,9 +590,12 @@
 
   <div id="log" style="display:none;"></div>
 
+  <div id="attachPreview" style="display:none;"></div>
+
   <form id="form" style="display:none;">
+    <input type="file" id="fileInput" accept="image/*,.txt,.md,.csv,.json,.js,.py,.html,.css,.log" multiple style="display:none;" />
     <div class="attach-icons">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+      <span id="attachBtn" style="cursor:pointer;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
     </div>
@@ -934,6 +962,53 @@
 
   let messageDivs = []; // parallel to history: { wrap, bubble, role, dbId }
   let memoryFacts = [];
+  let attachedFiles = []; // { name, kind: 'image'|'text', data }
+
+  const fileInput = document.getElementById('fileInput');
+  const attachBtn = document.getElementById('attachBtn');
+  const attachPreview = document.getElementById('attachPreview');
+
+  attachBtn.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', async () => {
+    for (const file of fileInput.files) {
+      if (file.size > 4 * 1024 * 1024) {
+        alert(file.name + ' is too large (max 4MB).');
+        continue;
+      }
+      if (file.type.startsWith('image/')) {
+        const dataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+        attachedFiles.push({ name: file.name, kind: 'image', data: dataUrl });
+      } else {
+        const text = await file.text();
+        attachedFiles.push({ name: file.name, kind: 'text', data: text.slice(0, 12000) });
+      }
+    }
+    fileInput.value = '';
+    renderAttachPreview();
+  });
+
+  function renderAttachPreview() {
+    attachPreview.innerHTML = '';
+    attachPreview.style.display = attachedFiles.length > 0 ? 'flex' : 'none';
+    attachedFiles.forEach((f, i) => {
+      const chip = document.createElement('div');
+      chip.className = 'attach-chip';
+      chip.innerHTML = '<span>' + (f.kind === 'image' ? '🖼 ' : '📄 ') + f.name + '</span>';
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '✕';
+      removeBtn.addEventListener('click', () => {
+        attachedFiles.splice(i, 1);
+        renderAttachPreview();
+      });
+      chip.appendChild(removeBtn);
+      attachPreview.appendChild(chip);
+    });
+  }
 
   async function loadMemory() {
     const { data, error } = await sb.from('memory').select('content');
@@ -1193,23 +1268,32 @@
 
   async function sendUserMessage(text) {
     showChat();
-    const { bubble: userBubble } = addHistoryMessage(text, 'user');
-    history.push({ role: 'user', content: text });
+
+    const attachmentsNote = attachedFiles.length > 0
+      ? '\n\n[Attached: ' + attachedFiles.map((f) => f.name).join(', ') + ']'
+      : '';
+    const { bubble: userBubble } = addHistoryMessage(text + attachmentsNote, 'user');
+    history.push({ role: 'user', content: text + attachmentsNote });
     sendBtn.disabled = true;
 
     const convoId = await ensureConversation(text);
-    const userDbId = await saveMessage(convoId, 'user', text);
+    const userDbId = await saveMessage(convoId, 'user', text + attachmentsNote);
     messageDivs[messageDivs.length - 1].dbId = userDbId;
     refreshMessageControls();
 
     const typing = addTyping();
+
+    const images = attachedFiles.filter((f) => f.kind === 'image').map((f) => f.data);
+    const documents = attachedFiles.filter((f) => f.kind === 'text').map((f) => ({ name: f.name, content: f.data }));
+    attachedFiles = [];
+    renderAttachPreview();
 
     try {
       const currentDateTime = new Date().toString();
       const res = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, currentDateTime, memoryFacts }),
+        body: JSON.stringify({ messages: history, currentDateTime, memoryFacts, images, documents }),
       });
       const data = await res.json();
       typing.remove();
