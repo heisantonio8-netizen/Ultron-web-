@@ -48,7 +48,7 @@ async function callGroq(fullMessages, model, extraParams, attempt) {
           "Authorization": `Bearer ${context.env.GROQ_API_KEY}`,
         },
         body: JSON.stringify({
-          model: model || "openai/gpt-oss-120b",
+          model: model || "Huihui-Qwen3.5-0.8B-abliterated.Q4_K_M",
           messages: fullMessages,
           temperature: 0.8,
           max_tokens: 800,
