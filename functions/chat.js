@@ -39,9 +39,9 @@ export async function onRequestPost(context) {
     const documentNote = documents && documents.length > 0
       ? `\n\nThe user has attached the following document(s) with their message:\n\n${documents.map((d) => `--- ${d.name} ---\n${d.content}`).join("\n\n")}\n\nUse their content to inform your answer when relevant.`
       : "";
-
-    async function callGroq(fullMessages, model, extraParams) {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+async function callGroq(fullMessages, model, extraParams, attempt) {
+      attempt = attempt || 1;
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -56,7 +56,18 @@ export async function onRequestPost(context) {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || "Groq API error");
+
+      if (!res.ok) {
+        const isRateLimit = res.status === 429 || (data.error?.message || "").toLowerCase().includes("rate limit");
+        if (isRateLimit && attempt < 3) {
+          const match = (data.error?.message || "").match(/try again in ([\d.]+)s/i);
+          const waitSeconds = match ? parseFloat(match[1]) : 5;
+          await new Promise((resolve) => setTimeout(resolve, Math.min(waitSeconds, 10) * 1000));
+          return callGroq(fullMessages, model, extraParams, attempt + 1);
+        }
+        throw new Error(data.error?.message || "Groq API error");
+      }
+
       let content = data.choices[0].message.content;
       // Strip any leaked reasoning/thinking traces some models include
       content = content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
